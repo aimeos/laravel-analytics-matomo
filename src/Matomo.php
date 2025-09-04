@@ -27,8 +27,8 @@ class Matomo implements Driver
         $methods = [
             'Actions.getPageUrls',
             'VisitsSummary.get',
-            'UserCountry.getCountry',
             'Referrers.getWebsites',
+            'UserCountry.getCountry',
         ];
 
         // Shared parameters for all methods
@@ -43,11 +43,11 @@ class Matomo implements Driver
         $responses = $this->client->getBulkRequest($methods, $optional);
 
         return [
-            'pageViews'     => $this->mapDaily((array) $responses[0], 'nb_hits'),
-            'visits'        => $this->mapDaily((array) $responses[1], 'nb_visits'),
-            'visitDuration' => $this->mapDaily((array) $responses[1], 'avg_time_on_site'),
-            'countries'     => $this->mapAggregate((array) $responses[2], 'label', 'nb_visits'),
-            'referrers'     => $this->mapAggregate((array) $responses[3], 'label', 'nb_visits'),
+            'pageViews'     => $this->mapDaily($responses[0], 'nb_hits'),
+            'visits'        => $this->mapDaily($responses[1], 'nb_visits'),
+            'visitDuration' => $this->mapDaily($responses[1], 'avg_time_on_site'),
+            'referrers'     => $this->mapAggregate($responses[2], 'label', 'url', 'nb_visits'),
+            'countries'     => $this->mapAggregate($responses[3], 'label', 'label', 'nb_visits'),
         ];
     }
 
@@ -116,33 +116,31 @@ class Matomo implements Driver
     /**
      * Map daily responses into [ ['key'=>date, 'value'=>count], ... ]
      */
-    protected function mapDaily(array $response, string $field): array
+    protected function mapDaily(object $response, string $field): array
     {
-        $data = [];
-        foreach ($response as $date => $row) {
-            $data[] = [
+        return collect($response)
+            ->map(fn($items, $date) => [
                 'key' => $date,
-                'value' => $row[$field] ?? 0,
-            ];
-        }
-        return $data;
+                'value' => collect($items)->sum($field),
+            ])
+            ->values() // reindex numerically
+            ->all();
     }
 
 
     /**
      * Map aggregate responses into [ ['key'=>label, 'value'=>count], ... ]
      */
-    protected function mapAggregate(array $response, string $labelField, string $valueField): array
+    protected function mapAggregate(object $response, string $groupField, string $labelField, string $valueField): array
     {
-        $data = [];
-        foreach ($response as $row) {
-            if(!empty($label = $row[$labelField] ?? null)) {
-                $data[] = [
-                    'key' => $label,
-                    'value' => $row[$valueField] ?? 0,
-                ];
-            }
-        }
-        return $data;
+        return collect($response)
+            ->flatten(1) // flatten one level: remove dates
+            ->groupBy($groupField)
+            ->map(fn($group) => [
+                'key' => $group->first()?->$labelField ?? $group->first()?->$groupField,
+                'value' => $group->sum($valueField),
+            ])
+            ->values() // reset numeric keys
+            ->all();
     }
 }
