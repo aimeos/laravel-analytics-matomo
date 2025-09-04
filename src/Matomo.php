@@ -136,7 +136,7 @@ class Matomo implements Driver
     {
         $data = [];
         foreach ($response as $row) {
-            if(!empty($label = $row[$labelField])) {
+            if(!empty($label = $row[$labelField] ?? null)) {
                 $data[] = [
                     'key' => $label,
                     'value' => $row[$valueField] ?? 0,
