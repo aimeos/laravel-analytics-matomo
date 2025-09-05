@@ -10,7 +10,6 @@
   },
   "require": {
     "php": "^8.2",
-    "visualappeal/matomo-php-api": "^2.0",
     "aimeos/laravel-analytics-bridge": "~1.0||dev-master"
   },
   "provide": {
