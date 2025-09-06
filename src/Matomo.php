@@ -50,7 +50,7 @@ class Matomo implements Driver
         $data = [];
 
         if(!$response->ok()) {
-            throw new Error( $response->getBody() );
+            throw new \RuntimeException( $response->body() );
         }
 
         $data = $response->json();
@@ -59,8 +59,8 @@ class Matomo implements Driver
             'views' => $this->mapDaily($response[0], 'nb_hits'),
             'visits' => $this->mapDaily($response[1], 'nb_visits'),
             'durations' => $this->mapDaily($response[1], 'avg_time_on_site'),
-            'referrers' => $this->mapAggregate($response[2], 'url', 'nb_visits'),
-            'countries' => $this->mapAggregate($response[3], 'label', 'nb_visits'),
+            'referrers' => $this->mapReferrers($response[2]),
+            'countries' => $this->mapCountries($response[3]),
         ];
     }
 
@@ -76,12 +76,16 @@ class Matomo implements Driver
             'method'     => 'Actions.getPageUrls',
             'idSite'     => $this->siteId,
             'token_auth' => $this->token,
-            'segment'    => "pageUrl==$url",
-            'date'       => "last{$days}",
             'format'     => 'json',
-            'period'     => 'day',
             'flat'       => 1,
+            'segment'    => "pageUrl==$url",
+            'period'     => 'day',
+            'date'       => "last{$days}",
         ]);
+
+        if(!$response->ok()) {
+            throw new \RuntimeException( $response->body() );
+        }
 
         return $this->mapDaily($response->json(), 'nb_hits');
     }
@@ -98,11 +102,15 @@ class Matomo implements Driver
             'method'     => 'VisitsSummary.get',
             'idSite'     => $this->siteId,
             'token_auth' => $this->token,
-            'segment'    => "pageUrl==$url",
-            'date'       => "last{$days}",
             'format'     => 'json',
+            'segment'    => "pageUrl==$url",
             'period'     => 'day',
+            'date'       => "last{$days}",
         ]);
+
+        if(!$response->ok()) {
+            throw new \RuntimeException( $response->body() );
+        }
 
         return $this->mapDaily($response->json(), 'nb_visits');
     }
@@ -119,11 +127,15 @@ class Matomo implements Driver
             'method'     => 'VisitsSummary.get',
             'idSite'     => $this->siteId,
             'token_auth' => $this->token,
-            'segment'    => "pageUrl==$url",
-            'date'       => "last{$days}",
             'format'     => 'json',
+            'segment'    => "pageUrl==$url",
             'period'     => 'day',
+            'date'       => "last{$days}",
         ]);
+
+        if(!$response->ok()) {
+            throw new \RuntimeException( $response->body() );
+        }
 
         return $this->mapDaily($response->json(), 'avg_time_on_site');
     }
@@ -140,11 +152,15 @@ class Matomo implements Driver
             'method'     => 'UserCountry.getCountry',
             'idSite'     => $this->siteId,
             'token_auth' => $this->token,
-            'segment'    => "pageUrl==$url",
-            'date'       => "last{$days}",
             'format'     => 'json',
-            'period'     => 'day',
+            'segment'    => "pageUrl==$url",
+            'period'     => 'range',
+            'date'       => "last{$days}",
         ]);
+
+        if(!$response->ok()) {
+            throw new \RuntimeException( $response->body() );
+        }
 
         return $this->mapAggregate($response->json(), 'label', 'nb_visits');
     }
@@ -161,11 +177,15 @@ class Matomo implements Driver
             'method'     => 'Referrers.getWebsites',
             'idSite'     => $this->siteId,
             'token_auth' => $this->token,
-            'segment'    => "pageUrl==$url",
-            'date'       => "last{$days}",
             'format'     => 'json',
-            'period'     => 'day',
+            'segment'    => "pageUrl==$url",
+            'period'     => 'range',
+            'date'       => "last{$days}",
         ]);
+
+        if(!$response->ok()) {
+            throw new \RuntimeException( $response->body() );
+        }
 
         return $this->mapAggregate($response->json(), 'label', 'nb_visits');
     }
@@ -189,12 +209,31 @@ class Matomo implements Driver
     /**
      * Map aggregate responses into [ ['key'=>label, 'value'=>count], ... ]
      */
-    protected function mapAggregate(array $response, string $labelField, string $valueField): array
+    protected function mapCountries(array $response): array
     {
         return collect($response)
             ->map(fn($item) => [
-                'key' => $item[$labelField],
-                'value' => $item[$valueField],
+                'key' => $item['label'],
+                'value' => $item['nb_visits'],
+            ])
+            ->all();
+    }
+
+
+    /**
+     * Map aggregate responses into [ ['key'=>label, 'value'=>count], ... ]
+     */
+    protected function mapReferrers(array $response): array
+    {
+        $build = function($item) {
+            $path = $item['Referrers_WebsitePage'] != 'index' ? $item['Referrers_WebsitePage'] : '';
+            return 'https://' . $item['Referrers_Website'] . '/' . $path;
+        };
+
+        return collect($response)
+            ->map(fn($item) => [
+                'key' => $item['url'] ?: $build($item),
+                'value' => $item['nb_visits'],
             ])
             ->all();
     }
