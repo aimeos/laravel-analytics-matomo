@@ -21,7 +21,7 @@ class Matomo implements Driver
     }
 
 
-    public function all(string $url, int $days = 30): ?array
+    public function stats(string $url, int $days = 30, array $types = []): ?array
     {
         if(!$this->url || !$this->token) {
             return null;
@@ -38,156 +38,59 @@ class Matomo implements Driver
             'flat'       => 1,
         ];
 
-        $response = Http::get($this->url, $shared + [
-            'urls' => [
-                'method=Actions.getPageUrls&period=day',
-                'method=VisitsSummary.get&period=day',
-                'method=Referrers.getWebsites&period=range',
-                'method=UserCountry.getCountry&period=range'
-            ],
-        ]);
+        $types = empty($types) ? ['views', 'visits', 'durations', 'countries', 'referrers'] : $types;
+        $urls = [];
 
-        $data = [];
+        if(in_array('views', $types)) {
+            $urls[] = 'method=Actions.getPageUrls&period=day';
+        }
+
+        if(in_array('visits', $types) || in_array('durations', $types)) {
+            $urls[] = 'method=VisitsSummary.get&period=day';
+        }
+
+        if(in_array('countries', $types)) {
+            $urls[] = 'method=UserCountry.getCountry&period=range';
+        }
+
+        if(in_array('referrers', $types)) {
+            $urls[] = 'method=Referrers.getWebsites&period=range';
+        }
+
+        $response = Http::get($this->url, $shared + ['urls' => $urls]);
 
         if(!$response->ok()) {
             throw new \RuntimeException( $response->body() );
         }
 
         $data = $response->json();
+        $result = [];
 
-        return [
-            'views' => $this->mapDaily($response[0], 'nb_hits'),
-            'visits' => $this->mapDaily($response[1], 'nb_visits'),
-            'durations' => $this->mapDaily($response[1], 'avg_time_on_site'),
-            'referrers' => $this->mapReferrers($response[2]),
-            'countries' => $this->mapCountries($response[3]),
-        ];
-    }
-
-
-    public function views(string $url, int $days = 30): ?array
-    {
-        if(!$this->url || !$this->token) {
-            return null;
+        if(in_array('views', $types)) {
+            $result['views'] = $this->mapDaily(array_shift($data) ?? [], 'nb_hits');
         }
 
-        $response = Http::get($this->url, [
-            'module'     => 'API',
-            'method'     => 'Actions.getPageUrls',
-            'idSite'     => $this->siteId,
-            'token_auth' => $this->token,
-            'format'     => 'json',
-            'flat'       => 1,
-            'segment'    => "pageUrl==$url",
-            'period'     => 'day',
-            'date'       => "last{$days}",
-        ]);
+        if(in_array('visits', $types) || in_array('durations', $types)) {
+            $entries = array_shift($data) ?? [];
 
-        if(!$response->ok()) {
-            throw new \RuntimeException( $response->body() );
+            if(in_array('visits', $types)) {
+                $result['visits'] = $this->mapDaily($entries, 'nb_visits');
+            }
+
+            if(in_array('durations', $types)) {
+                $result['durations'] = $this->mapDaily($entries, 'avg_time_on_site');
+            }
         }
 
-        return $this->mapDaily($response->json(), 'nb_hits');
-    }
-
-
-    public function visits(string $url, int $days = 30): ?array
-    {
-        if(!$this->url || !$this->token) {
-            return null;
+        if(in_array('countries', $types)) {
+            $result['countries'] = $this->mapCountries(array_shift($data) ?? []);
         }
 
-        $response = Http::get($this->url, [
-            'module'     => 'API',
-            'method'     => 'VisitsSummary.get',
-            'idSite'     => $this->siteId,
-            'token_auth' => $this->token,
-            'format'     => 'json',
-            'segment'    => "pageUrl==$url",
-            'period'     => 'day',
-            'date'       => "last{$days}",
-        ]);
-
-        if(!$response->ok()) {
-            throw new \RuntimeException( $response->body() );
+        if(in_array('referrers', $types)) {
+            $result['referrers'] = $this->mapReferrers(array_shift($data) ?? []);
         }
 
-        return $this->mapDaily($response->json(), 'nb_visits');
-    }
-
-
-    public function durations(string $url, int $days = 30): ?array
-    {
-        if(!$this->url || !$this->token) {
-            return null;
-        }
-
-        $response = Http::get($this->url, [
-            'module'     => 'API',
-            'method'     => 'VisitsSummary.get',
-            'idSite'     => $this->siteId,
-            'token_auth' => $this->token,
-            'format'     => 'json',
-            'segment'    => "pageUrl==$url",
-            'period'     => 'day',
-            'date'       => "last{$days}",
-        ]);
-
-        if(!$response->ok()) {
-            throw new \RuntimeException( $response->body() );
-        }
-
-        return $this->mapDaily($response->json(), 'avg_time_on_site');
-    }
-
-
-    public function countries(string $url, int $days = 30): ?array
-    {
-        if(!$this->url || !$this->token) {
-            return null;
-        }
-
-        $response = Http::get($this->url, [
-            'module'     => 'API',
-            'method'     => 'UserCountry.getCountry',
-            'idSite'     => $this->siteId,
-            'token_auth' => $this->token,
-            'format'     => 'json',
-            'segment'    => "pageUrl==$url",
-            'period'     => 'range',
-            'date'       => "last{$days}",
-        ]);
-
-        if(!$response->ok()) {
-            throw new \RuntimeException( $response->body() );
-        }
-
-        return $this->mapAggregate($response->json(), 'label', 'nb_visits');
-    }
-
-
-    public function referrers(string $url, int $days = 30): ?array
-    {
-        if(!$this->url || !$this->token) {
-            return null;
-        }
-
-        $response = Http::get($this->url, [
-            'module'     => 'API',
-            'method'     => 'Referrers.getWebsites',
-            'idSite'     => $this->siteId,
-            'token_auth' => $this->token,
-            'format'     => 'json',
-            'segment'    => "pageUrl==$url",
-            'period'     => 'range',
-            'date'       => "last{$days}",
-        ]);
-
-        if(!$response->ok()) {
-            throw new \RuntimeException( $response->body() );
-        }
-
-        return $this->mapAggregate($response->json(), 'label', 'nb_visits');
+        return $result;
     }
 
 
