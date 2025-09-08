@@ -38,7 +38,7 @@ class Matomo implements Driver
             'flat'       => 1,
         ];
 
-        $types = empty($types) ? ['views', 'visits', 'durations', 'countries', 'referrers'] : $types;
+        $types = empty($types) ? ['views', 'visits', 'durations', 'countries', 'referrers', 'referrertypes'] : $types;
         $urls = [];
 
         if(in_array('views', $types)) {
@@ -55,6 +55,10 @@ class Matomo implements Driver
 
         if(in_array('referrers', $types)) {
             $urls[] = 'method=Referrers.getWebsites&period=range';
+        }
+
+        if(in_array('referrertypes', $types)) {
+            $urls[] = 'method=Referrers.getReferrerType&period=range';
         }
 
         $response = Http::get($this->url, $shared + ['urls' => $urls]);
@@ -83,11 +87,15 @@ class Matomo implements Driver
         }
 
         if(in_array('countries', $types)) {
-            $result['countries'] = $this->mapCountries(array_shift($data) ?? []);
+            $result['countries'] = $this->mapAggregate(array_shift($data) ?? []);
         }
 
         if(in_array('referrers', $types)) {
             $result['referrers'] = $this->mapReferrers(array_shift($data) ?? []);
+        }
+
+        if(in_array('referrertypes', $types)) {
+            $result['referrertypes'] = $this->mapAggregate(array_shift($data) ?? []);
         }
 
         return $result;
@@ -112,7 +120,7 @@ class Matomo implements Driver
     /**
      * Map aggregate responses into [ ['key'=>label, 'value'=>count], ... ]
      */
-    protected function mapCountries(array $response): array
+    protected function mapAggregate(array $response): array
     {
         return collect($response)
             ->map(fn($item) => [
