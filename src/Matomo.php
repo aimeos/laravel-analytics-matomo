@@ -33,7 +33,7 @@ class Matomo implements Driver
             'token_auth' => $this->token,
             'idSite'     => $this->siteId,
             'segment'    => "pageUrl==$url",
-            'date'       => "last{$days}",
+            'date'       => "previous{$days}",
             'format'     => 'json',
             'flat'       => 1,
         ];
