@@ -35,10 +35,9 @@ class Matomo implements Driver
             'segment'    => "pageUrl==$url",
             'date'       => "previous{$days}",
             'format'     => 'json',
-            'flat'       => 1,
         ];
 
-        $types = empty($types) ? ['views', 'visits', 'durations', 'countries', 'referrers', 'referrertypes'] : $types;
+        $types = empty($types) ? ['views', 'visits', 'durations', 'countries', 'referrers'] : $types;
         $urls = [];
 
         if(in_array('views', $types)) {
@@ -46,7 +45,7 @@ class Matomo implements Driver
         }
 
         if(in_array('visits', $types) || in_array('durations', $types)) {
-            $urls[] = 'method=VisitsSummary.get&period=day';
+            $urls[] = 'method=VisitsSummary.get&period=day&flat=1';
         }
 
         if(in_array('countries', $types)) {
@@ -54,11 +53,7 @@ class Matomo implements Driver
         }
 
         if(in_array('referrers', $types)) {
-            $urls[] = 'method=Referrers.getWebsites&period=range';
-        }
-
-        if(in_array('referrertypes', $types)) {
-            $urls[] = 'method=Referrers.getReferrerType&period=range';
+            $urls[] = 'method=Referrers.getReferrerType&expanded=1&period=range';
         }
 
         $response = Http::get($this->url, $shared + ['urls' => $urls]);
@@ -92,10 +87,6 @@ class Matomo implements Driver
 
         if(in_array('referrers', $types)) {
             $result['referrers'] = $this->mapReferrers(array_shift($data) ?? []);
-        }
-
-        if(in_array('referrertypes', $types)) {
-            $result['referrertypes'] = $this->mapAggregate(array_shift($data) ?? []);
         }
 
         return $result;
@@ -136,15 +127,14 @@ class Matomo implements Driver
      */
     protected function mapReferrers(array $response): array
     {
-        $build = function($item) {
-            $path = $item['Referrers_WebsitePage'] != 'index' ? $item['Referrers_WebsitePage'] : '';
-            return 'https://' . $item['Referrers_Website'] . '/' . $path;
-        };
-
         return collect($response)
             ->map(fn($item) => [
-                'key' => $item['url'] ?: $build($item),
+                'key' => $item['label'],
                 'value' => $item['nb_visits'],
+                'rows' => collect($item['subtable'] ?? [])->map(fn($row) => [
+                    'key' => $row['label'],
+                    'value' => $row['nb_visits'],
+                ])
             ])
             ->all();
     }
