@@ -37,7 +37,7 @@ class Matomo implements Driver
             'format'     => 'json',
         ];
 
-        $types = empty($types) ? ['views', 'visits', 'durations', 'countries', 'referrers'] : $types;
+        $types = empty($types) ? ['views', 'visits', 'durations', 'conversions', 'countries', 'referrers'] : $types;
         $urls = [];
 
         if(in_array('views', $types)) {
@@ -46,6 +46,10 @@ class Matomo implements Driver
 
         if(in_array('visits', $types) || in_array('durations', $types)) {
             $urls[] = 'method=VisitsSummary.get&period=day&flat=1';
+        }
+
+        if(in_array('conversions', $types)) {
+            $urls[] = 'method=Goals.get&period=day';
         }
 
         if(in_array('countries', $types)) {
@@ -79,6 +83,10 @@ class Matomo implements Driver
             if(in_array('durations', $types)) {
                 $result['durations'] = $this->mapDaily($entries, 'avg_time_on_site');
             }
+        }
+
+        if(in_array('conversions', $types)) {
+            $result['conversions'] = $this->mapDaily(array_shift($data) ?? [], 'nb_conversions');
         }
 
         if(in_array('countries', $types)) {
@@ -123,7 +131,7 @@ class Matomo implements Driver
 
 
     /**
-     * Map aggregate responses into [ ['key'=>label, 'value'=>count], ... ]
+     * Map aggregate responses into [ ['key'=>label, 'value'=>count, 'rows'=>[]], ... ]
      */
     protected function mapReferrers(array $response): array
     {
