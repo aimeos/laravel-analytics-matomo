@@ -11,8 +11,5 @@
   "require": {
     "php": "^8.2",
     "aimeos/laravel-analytics-bridge": "~1.0||dev-master"
-  },
-  "provide": {
-    "aimeos/laravel-analytics-driver": "*"
   }
 }
