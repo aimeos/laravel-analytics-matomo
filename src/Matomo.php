@@ -149,7 +149,7 @@ class Matomo implements Driver
                 'rows' => collect($item['subtable'] ?? [])->map(fn($row) => [
                     'key' => $row['label'],
                     'value' => $row['nb_visits'],
-                ])
+                ])->all()
             ])
             ->all();
     }
