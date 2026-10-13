@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Http;
 
 class Matomo implements Driver
 {
-    private array $types = ['views', 'visits', 'durations', 'conversions', 'countries', 'referrers'];
+    private array $types = ['views', 'visits', 'durations', 'conversions', 'countries', 'referrers', 'links'];
     private ?string $siteId;
     private ?string $token;
     private ?string $url;
@@ -33,31 +33,36 @@ class Matomo implements Driver
             'method'     => 'API.getBulkRequest',
             'token_auth' => $this->token,
             'idSite'     => $this->siteId,
-            'segment'    => "pageUrl==$url",
             'date'       => "previous{$days}",
             'format'     => 'json',
         ];
 
         $urls = [];
+        $page = 'pageUrl=' . urlencode($url);
+        $segment = 'segment=' . urlencode("pageUrl==$url");
 
         if(in_array('views', $this->types) || in_array('durations', $this->types)) {
-            $urls[] = 'method=Actions.getPageUrl&period=day&pageUrl=' . urlencode($url);
+            $urls[] = "method=Actions.getPageUrl&period=day&$page";
         }
 
         if(in_array('visits', $this->types)) {
-            $urls[] = 'method=VisitsSummary.get&period=day&flat=1';
+            $urls[] = "method=VisitsSummary.get&period=day&flat=1&$segment";
         }
 
         if(in_array('conversions', $this->types)) {
-            $urls[] = 'method=Goals.get&period=day';
+            $urls[] = "method=Goals.get&period=day&$segment";
         }
 
         if(in_array('countries', $this->types)) {
-            $urls[] = 'method=UserCountry.getCountry&period=range';
+            $urls[] = "method=UserCountry.getCountry&period=range&$segment";
         }
 
         if(in_array('referrers', $this->types)) {
-            $urls[] = 'method=Referrers.getReferrerType&expanded=1&period=range';
+            $urls[] = "method=Referrers.getReferrerType&expanded=1&period=range&$segment";
+        }
+
+        if(in_array('links', $this->types)) {
+            $urls[] = "method=Transitions.getTransitionsForPageUrl&period=range&limitBeforeGrouping=100&$page";
         }
 
         $response = Http::get($this->url, $shared + ['urls' => $urls]);
@@ -97,6 +102,10 @@ class Matomo implements Driver
             $result['referrers'] = $this->mapReferrers(array_shift($data) ?? []);
         }
 
+        if(in_array('links', $this->types)) {
+            $result['links'] = $this->mapLinks(array_shift($data) ?? []);
+        }
+
         return $result;
     }
 
@@ -133,6 +142,26 @@ class Matomo implements Driver
                 'key' => $item['label'],
                 'value' => $item['nb_visits'],
             ])
+            ->all();
+    }
+
+
+    /**
+     * Map transitions into [ ['key'=>target, 'value'=>count], ... ]
+     */
+    protected function mapLinks(array $response): array
+    {
+        return collect([
+                ...$response['followingPages'] ?? [],
+                ...$response['outlinks'] ?? [],
+                ...$response['downloads'] ?? [],
+            ])
+            ->map(fn($item) => [
+                'key' => $item['label'],
+                'value' => $item['referrals'],
+            ])
+            ->sortByDesc('value')
+            ->values()
             ->all();
     }
 
