@@ -40,11 +40,11 @@ class Matomo implements Driver
 
         $urls = [];
 
-        if(in_array('views', $this->types)) {
-            $urls[] = 'method=Actions.getPageUrls&period=day';
+        if(in_array('views', $this->types) || in_array('durations', $this->types)) {
+            $urls[] = 'method=Actions.getPageUrl&period=day&pageUrl=' . urlencode($url);
         }
 
-        if(in_array('visits', $this->types) || in_array('durations', $this->types)) {
+        if(in_array('visits', $this->types)) {
             $urls[] = 'method=VisitsSummary.get&period=day&flat=1';
         }
 
@@ -69,20 +69,20 @@ class Matomo implements Driver
         $data = $response->json();
         $result = [];
 
-        if(in_array('views', $this->types)) {
-            $result['views'] = $this->mapDaily(array_shift($data) ?? [], 'nb_hits');
-        }
-
-        if(in_array('visits', $this->types) || in_array('durations', $this->types)) {
+        if(in_array('views', $this->types) || in_array('durations', $this->types)) {
             $entries = array_shift($data) ?? [];
 
-            if(in_array('visits', $this->types)) {
-                $result['visits'] = $this->mapDaily($entries, 'nb_visits');
+            if(in_array('views', $this->types)) {
+                $result['views'] = $this->mapDaily($entries, 'nb_hits');
             }
 
             if(in_array('durations', $this->types)) {
-                $result['durations'] = $this->mapDaily($entries, 'avg_time_on_site');
+                $result['durations'] = $this->mapDaily($entries, 'avg_time_on_page');
             }
+        }
+
+        if(in_array('visits', $this->types)) {
+            $result['visits'] = $this->mapDaily(array_shift($data) ?? [], 'nb_visits');
         }
 
         if(in_array('conversions', $this->types)) {
